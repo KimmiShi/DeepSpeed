@@ -84,7 +84,7 @@ from .pipe.module import PipelineModule
 from .utils import get_ma_status
 from ..ops.adam import FusedAdam
 from ..moe.sharded_moe import TopKGate, MOELayer
-from ..moe.layer import MoE,FmoeMoE
+from ..moe.layer import MoE
 from ..moe.utils import is_moe_param
 from ..git_version_info import version
 
@@ -1054,7 +1054,7 @@ class DeepSpeedEngine(Module):
 
         # MoE related initialization
         for _, module in self.module.named_modules():
-            if isinstance(module, MoE) or isinstance(module, FMoE) or isinstance(module, FmoeMoE):
+            if isinstance(module, MoE) or isinstance(module, FMoE):
                 self.has_moe_layers = True
                 self.num_experts.append(module.num_experts)
 
