@@ -84,7 +84,7 @@ from .pipe.module import PipelineModule
 from .utils import get_ma_status
 from ..ops.adam import FusedAdam
 from ..moe.sharded_moe import TopKGate, MOELayer
-from ..moe.layer import MoE
+from ..moe.layer import MoE,FmoeMoE
 from ..moe.utils import is_moe_param
 from ..git_version_info import version
 
@@ -95,6 +95,8 @@ from deepspeed.accelerator import get_accelerator
 from deepspeed.ops.op_builder import UtilsBuilder
 
 from deepspeed.runtime.config import DtypeEnum
+
+from fmoe import FMoE
 
 # Set to torch's distributed package or deepspeed.comm based inside DeepSpeedEngine init
 dist = None
@@ -223,8 +225,8 @@ class DeepSpeedEngine(Module):
         self.gas_boundary_ctr = 0
         self.dist_backend = get_accelerator().communication_backend_name()
         self.has_moe_layers = False
-        self.num_experts = []
-        self.gate_modules = []
+        self.num_experts = []   # for load and save checkpoint
+        self.gate_modules = []  # for time profile and print
         self.moe_layers = []
         self._step_applied = False
         self._global_grad_norm = None
@@ -1052,7 +1054,7 @@ class DeepSpeedEngine(Module):
 
         # MoE related initialization
         for _, module in self.module.named_modules():
-            if isinstance(module, MoE):
+            if isinstance(module, MoE) or isinstance(module, FMoE) or isinstance(module, FmoeMoE):
                 self.has_moe_layers = True
                 self.num_experts.append(module.num_experts)
 
