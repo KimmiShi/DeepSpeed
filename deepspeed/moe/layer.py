@@ -30,13 +30,41 @@ class VitFMoE(FMoE):
         )
         # expert_kwargs['group'] = moe_group
         self.experts = experts
-        self.experts_fused = True
+        self.experts_fused = False
         self.num_experts = num_expert
 
-    def expert_fn(self, inp, fwd_cnt):
-        # import pdb;pdb.set_trace()
-        # print("rank:", torch.distributed.get_rank(), "fwd_cnt:", fwd_cnt)
-        return self.experts(inp)
+    # def expert_fn(self, inp, fwd_cnt):
+    #     # import pdb;pdb.set_trace()
+    #     # print("rank:", torch.distributed.get_rank(), "fwd_cnt:", fwd_cnt)
+    #     return self.experts(inp)
+
+    def expert_fn(self, inp, fwd_expert_count):
+        r"""
+        The default expert function which either calls the experts as a whole
+        or as separate experts.
+        """
+        if self.experts_fused:
+            return self.experts(inp, fwd_expert_count)
+        if isinstance(fwd_expert_count, torch.Tensor):
+            fwd_expert_count_cpu = fwd_expert_count.cpu().numpy()
+        outputs = []
+        base_idx = 0
+        for i in range(self.num_expert):
+            batch_size = fwd_expert_count_cpu[i]
+            inp_slice = inp[base_idx : base_idx + batch_size]
+            # outputs.append(self.experts[i](inp_slice, torch.tensor([fwd_expert_count[i]])))
+            outputs.append(self.experts.forward_single(i, inp_slice))
+            base_idx += batch_size
+        return torch.cat(outputs, dim=0)
+
+    def expert_fn_single(self, inp, fwd_expert_count, idx):
+        r"""
+        forward single expert for smart scheduling.
+        """
+        assert not self.experts_fused, "should not use fused experts"
+        # output = self.experts[idx](inp)
+        output = self.experts.forward_single(idx, inp)
+        return output
 
     def _set_ep_group(self, group):
         self.moe_group = group
@@ -162,6 +190,7 @@ class MoE(torch.nn.Module):
         if self.use_fmoe:
             output = self.deepspeed_moe(hidden_states)
         else:
+            # import pdb;pdb.set_trace()
             output = self.deepspeed_moe(hidden_states, used_token)
 
         if self.use_residual:

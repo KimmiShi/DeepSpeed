@@ -33,3 +33,7 @@ class Experts(torch.nn.Module):
 
         expert_output = torch.cat(expert_outputs, dim=1)
         return expert_output
+
+    def forward_single(self, idx, inputs):
+        expert_output = self.deepspeed_experts[idx](inputs)
+        return expert_output

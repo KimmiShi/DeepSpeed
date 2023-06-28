@@ -2870,7 +2870,7 @@ class DeepSpeedEngine(Module):
             Get the state dict of the non-moe layers
         """
         for key in list(full_state_dict.keys()):
-            if 'expert' in key and 'moe.gate.wg.weight' not in key:
+            if 'expert' in key and 'moe.gate' not in key:
                 full_state_dict.pop(key)
 
         return full_state_dict
@@ -2897,7 +2897,7 @@ class DeepSpeedEngine(Module):
                 # get all moe parameters
                 moe_state_dict = {}
                 for n, p in module.state_dict().items():
-                    if 'expert' in n and 'moe.gate.wg.weight' not in n:
+                    if 'expert' in n and 'moe.gate' not in n:
                         moe_state_dict[n_module + '.' + n] = p
                 moe_str_prefix = '.deepspeed_moe.experts.deepspeed_experts.'
                 # print(moe_state_dict.keys()) # until now, everything is fine. So the bug happens at next few lines
@@ -2942,6 +2942,7 @@ class DeepSpeedEngine(Module):
             return
 
         # Save optimizer states. They are different across each exp parallel rank.
+        # for zero, this is None
         optimizer_state = {
             'optimizer': self.optimizer.state_dict() if self.optimizer and not self.zero_optimization() else None
         }
