@@ -13,10 +13,10 @@ from .experts import Experts
 import typing
 
 from fmoe import FMoE
-
+import fmoe
 class VitFMoE(FMoE):
     def __init__(
-        self, experts, num_expert=1, d_model=1, top_k=1, moe_group=None, expert_kwargs={}
+        self, experts, num_expert=1, d_model=1, top_k=1, moe_group=None, gate_kwargs={}
     ):
         world_size = torch.distributed.get_world_size(moe_group)
         super().__init__(
@@ -26,7 +26,8 @@ class VitFMoE(FMoE):
             mp_group=None,
             top_k=top_k,
             moe_group=moe_group,
-            # gate = fmoe.gates.GShardGate,
+            gate = fmoe.gates.GShardGate,
+            gate_kwargs = gate_kwargs
         )
         # expert_kwargs['group'] = moe_group
         self.experts = experts
@@ -114,7 +115,7 @@ class MoE(torch.nn.Module):
                  use_rts=True,
                  use_tutel: bool = False,
                  enable_expert_tensor_parallelism: bool = False,
-                 use_fmoe: bool = True):
+                 use_fmoe: bool = False):
 
         super(MoE, self).__init__()
 
@@ -146,8 +147,9 @@ class MoE(torch.nn.Module):
         else:
             # Note: need to setup groups for moe before creating MOE layers
             ep_group = groups._get_expert_parallel_group(self.expert_group_name)
-            self.deepspeed_moe = VitFMoE(experts, d_model=hidden_size,
-                                        moe_group = ep_group)
+            self.deepspeed_moe = VitFMoE(experts, d_model=hidden_size, top_k=k,
+                                        moe_group = ep_group,
+                                        gate_kwargs = {'capacity':(capacity_factor, eval_capacity_factor)})
 
         if self.use_residual:
             self.mlp = expert
@@ -202,6 +204,6 @@ class MoE(torch.nn.Module):
             coef = torch.nn.functional.softmax(coef, dim=-1)
             output = output * coef[..., 0:1] + output_mlp * coef[..., 1:]
         if self.use_fmoe:
-            return output,None,None         # todo: fix this
+            return output#,None,None         # todo: fix this
         else:
-            return output, self.deepspeed_moe.l_aux, self.deepspeed_moe.exp_counts
+            return output#, self.deepspeed_moe.l_aux, self.deepspeed_moe.exp_counts
