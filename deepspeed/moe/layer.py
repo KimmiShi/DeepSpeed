@@ -148,6 +148,7 @@ class MoE(torch.nn.Module):
             # Note: need to setup groups for moe before creating MOE layers
             ep_group = groups._get_expert_parallel_group(self.expert_group_name)
             self.deepspeed_moe = VitFMoE(experts, d_model=hidden_size, top_k=k,
+                                         num_expert=self.num_local_experts,
                                         moe_group = ep_group,
                                         gate_kwargs = {'capacity':(capacity_factor, eval_capacity_factor)})
 

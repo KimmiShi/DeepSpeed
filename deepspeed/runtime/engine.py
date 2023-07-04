@@ -1054,7 +1054,7 @@ class DeepSpeedEngine(Module):
 
         # MoE related initialization
         for _, module in self.module.named_modules():
-            if isinstance(module, MoE) or isinstance(module, FMoE):
+            if isinstance(module, MoE):# or isinstance(module, FMoE):
                 self.has_moe_layers = True
                 self.num_experts.append(module.num_experts)
 
