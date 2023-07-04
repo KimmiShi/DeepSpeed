@@ -47,7 +47,8 @@ class MoE(torch.nn.Module):
                  drop_tokens: bool = True,
                  use_rts=True,
                  use_tutel: bool = False,
-                 enable_expert_tensor_parallelism: bool = False):
+                 enable_expert_tensor_parallelism: bool = False,
+                 buggy=True):
 
         super(MoE, self).__init__()
 
@@ -74,6 +75,11 @@ class MoE(torch.nn.Module):
                                       self.ep_size,
                                       self.num_local_experts,
                                       use_tutel=use_tutel)
+        if buggy:
+            self.tmp = torch.nn.Linear(1024,1)
+        else:
+            self.tmp = torch.nn.Linear(1024,8)
+
         if self.use_residual:
             self.mlp = expert
             # coefficient is used for weighted sum of the output of expert and mlp
@@ -121,4 +127,4 @@ class MoE(torch.nn.Module):
             coef = self.coefficient(hidden_states)
             coef = torch.nn.functional.softmax(coef, dim=-1)
             output = output * coef[..., 0:1] + output_mlp * coef[..., 1:]
-        return output, self.deepspeed_moe.l_aux, self.deepspeed_moe.exp_counts
+        return output#, self.deepspeed_moe.l_aux, self.deepspeed_moe.exp_counts
