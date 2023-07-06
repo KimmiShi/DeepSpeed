@@ -14,13 +14,15 @@ import typing
 
 from fmoe import FMoE
 import fmoe
+import copy
 class VitFMoE(FMoE):
     def __init__(
-        self, experts, num_expert=1, d_model=1, top_k=1, moe_group=None, gate_kwargs={}
+        self, expert, d_model=1, top_k=1, num_local_experts=1, expert_group_name=None, moe_group=None, gate_kwargs={}
     ):
+        assert expert_group_name is not None, 'expert_group_name should be provided'
         world_size = torch.distributed.get_world_size(moe_group)
         super().__init__(
-            num_expert=num_expert,
+            num_expert=num_local_experts,
             d_model=d_model,
             world_size=world_size,
             mp_group=None,
@@ -29,15 +31,16 @@ class VitFMoE(FMoE):
             gate = fmoe.gates.GShardGate,
             gate_kwargs = gate_kwargs
         )
-        # expert_kwargs['group'] = moe_group
-        self.experts = experts
-        self.experts_fused = False
-        self.num_experts = num_expert
 
-    # def expert_fn(self, inp, fwd_cnt):
-    #     # import pdb;pdb.set_trace()
-    #     # print("rank:", torch.distributed.get_rank(), "fwd_cnt:", fwd_cnt)
-    #     return self.experts(inp)
+        self.experts = torch.nn.ModuleList([copy.deepcopy(expert) for i in range(num_local_experts)])
+        self.experts_fused = False
+        self.num_experts = num_local_experts
+        self.num_local_experts = num_local_experts
+
+        for expert in self.experts:
+            for name, param in expert.named_parameters():
+                param.allreduce = False
+                param.group_name = expert_group_name
 
     def expert_fn(self, inp, fwd_expert_count):
         r"""
@@ -50,11 +53,12 @@ class VitFMoE(FMoE):
             fwd_expert_count_cpu = fwd_expert_count.cpu().numpy()
         outputs = []
         base_idx = 0
-        for i in range(self.num_expert):
+        for i in range(self.num_experts):
             batch_size = fwd_expert_count_cpu[i]
             inp_slice = inp[base_idx : base_idx + batch_size]
             # outputs.append(self.experts[i](inp_slice, torch.tensor([fwd_expert_count[i]])))
-            outputs.append(self.experts.forward_single(i, inp_slice))
+            outputs.append(self.experts[i](inp_slice))
+            # outputs.append(self.experts.forward_single(i, inp_slice))
             base_idx += batch_size
         return torch.cat(outputs, dim=0)
 
@@ -63,8 +67,8 @@ class VitFMoE(FMoE):
         forward single expert for smart scheduling.
         """
         assert not self.experts_fused, "should not use fused experts"
-        # output = self.experts[idx](inp)
-        output = self.experts.forward_single(idx, inp)
+        output = self.experts[idx](inp)
+        # output = self.experts.forward_single(idx, inp)
         return output
 
     def _set_ep_group(self, group):
@@ -148,9 +152,10 @@ class MoE(torch.nn.Module):
             # Note: need to setup groups for moe before creating MOE layers
             ep_group = groups._get_expert_parallel_group(self.expert_group_name)
             self.deepspeed_moe = VitFMoE(experts, d_model=hidden_size, top_k=k,
-                                         num_expert=self.num_local_experts,
-                                        moe_group = ep_group,
-                                        gate_kwargs = {'capacity':(capacity_factor, eval_capacity_factor)})
+                                         num_local_experts=self.num_local_experts,
+                                         moe_group = ep_group,
+                                         expert_group_name = self.expert_group_name,
+                                         gate_kwargs = {'capacity':(capacity_factor, eval_capacity_factor)})
 
         if self.use_residual:
             self.mlp = expert

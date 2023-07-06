@@ -115,6 +115,7 @@ except ImportError:
     # Fail silently so we don't spam logs unnecessarily if user isn't using amp
     APEX_INSTALLED = False
 
+MOE_PARAM_PREFIX = '.deepspeed_moe.experts.'
 
 def split_half_float_double_sparse(tensors):
     device_type = get_accelerator().device_name()
@@ -2386,7 +2387,7 @@ class DeepSpeedEngine(Module):
                     map_location=torch.device('cpu'))
 
                 # Updating global -> local expert ids
-                moe_str_prefix = '.deepspeed_moe.experts.deepspeed_experts.'
+                moe_str_prefix = MOE_PARAM_PREFIX #'.deepspeed_moe.experts.deepspeed_experts.'
                 for key in list(expert_state_dict.keys()):
                     local_key = key.replace(f'{moe_str_prefix}{global_expert_id}',
                                             f'{moe_str_prefix}{local_expert_id}')
@@ -2408,7 +2409,7 @@ class DeepSpeedEngine(Module):
                                                                    map_location=torch.device('cpu'))
                         # print(expert_state_dict.keys())
                         # Updating global -> local expert ids
-                        moe_str_prefix = '.deepspeed_moe.experts.deepspeed_experts.'
+                        moe_str_prefix = MOE_PARAM_PREFIX #'.deepspeed_moe.experts.deepspeed_experts.'
                         for key in list(expert_state_dict.keys()):
                             local_key = key.replace(f'{moe_str_prefix}{global_expert_id}',
                                                     f'{moe_str_prefix}{local_expert_id}')
@@ -2899,7 +2900,7 @@ class DeepSpeedEngine(Module):
                 for n, p in module.state_dict().items():
                     if 'expert' in n and 'moe.gate' not in n:
                         moe_state_dict[n_module + '.' + n] = p
-                moe_str_prefix = '.deepspeed_moe.experts.deepspeed_experts.'
+                moe_str_prefix = MOE_PARAM_PREFIX #'.deepspeed_moe.experts.deepspeed_experts.'
                 # print(moe_state_dict.keys()) # until now, everything is fine. So the bug happens at next few lines
                 # Reorder the moe name rank, so that each checkpoint only has one expert
                 experts_state_dict = defaultdict(dict)
